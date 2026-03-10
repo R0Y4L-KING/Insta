@@ -1,9 +1,7 @@
 import os
-import sys
 import json
 import time
 import random
-import logging
 import requests
 import names
 from threading import Thread
@@ -19,24 +17,23 @@ from telegram.ext import (
     ContextTypes
 )
 
-# --- RENDER SERVER SETUP ---
+# --- RENDER SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "IgMaker Bot is Online!"
+def home(): return "Ig Bot with Admin Panel is Online!"
 def run_flask(): 
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
-# --- CONFIGURATION ---
+# --- CONFIG ---
 BOT_TOKEN = "8759548686:AAE7f4Y3Z2zf88hkr_JfhzOckzT3uTRgtC4"
 ADMIN_IDS = [7066213489]
 API_URL = "https://www.instagram.com/api/v1/"
 
-# Files for Persistence
+# Persistent Files
 USERS_FILE = "insta_users.json"
 BANNED_FILE = "insta_banned.json"
 
-# Conversation States
+# States
 GET_EMAIL, GET_OTP, GET_PHOTO = range(3)
 BROADCAST_MSG, BAN_ID = range(3, 5)
 
@@ -54,12 +51,12 @@ def save_data(file, data):
 all_users = load_data(USERS_FILE)
 banned_users = load_data(BANNED_FILE)
 
-# --- INSTAGRAM LOGIC ---
+# --- INSTA HEADERS ---
 def get_headers():
-    agent = f'Mozilla/5.0 (Linux; Android {random.randint(9, 13)}; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
+    agent = f'Mozilla/5.0 (Linux; Android {random.randint(9, 13)})'
     try:
-        r = requests.get(API_URL + 'web/accounts/login/ajax/', headers={'user-agent': agent}, timeout=20).cookies
-        res = requests.get('https://www.instagram.com/', headers={'user-agent': agent}, timeout=20)
+        r = requests.get(API_URL + 'web/accounts/login/ajax/', headers={'user-agent': agent}, timeout=15).cookies
+        res = requests.get('https://www.instagram.com/', headers={'user-agent': agent}, timeout=15)
         appid = res.text.split('APP_ID":"')[1].split('"')[0]
         return {
             'authority': 'www.instagram.com',
@@ -70,7 +67,7 @@ def get_headers():
         }
     except: return None
 
-# --- BOT HANDLERS ---
+# --- MAIN HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     all_users.add(user_id)
@@ -80,16 +77,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("🚫 You are banned from @unlimited_ig_bot")
         return
 
-    welcome_text = (
+    text = (
         "🌟 **Welcome to @unlimited_ig_bot** 🌟\n\n"
         "Ab Instagram accounts banana hua aur bhi asaan! 🚀\n\n"
         "**Bot Features:**\n"
-        "✅ **Fast Creation:** OTP validate hote hi account ready.\n"
-        "✅ **Profile Photo:** Gallery se photo upload karein.\n"
-        "✅ **Unlimited Access:** Bina kisi limit ke accounts.\n\n"
+        "✅ Fast Creation & OTP Support\n"
+        "✅ Custom Profile Photo Upload\n"
+        "✅ Unlimited Accounts Access\n\n"
         "👇 **Account banana shuru karein:**"
     )
-    
     buttons = [
         [InlineKeyboardButton("🚀 Create Account", callback_data="make_acc")],
         [InlineKeyboardButton("📚 Help", callback_data="help"), InlineKeyboardButton("ℹ️ About", callback_data="about")]
@@ -99,126 +95,94 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     markup = InlineKeyboardMarkup(buttons)
     if update.callback_query:
-        await update.callback_query.edit_message_text(welcome_text, reply_markup=markup, parse_mode='Markdown')
+        await update.callback_query.edit_message_text(text, reply_markup=markup, parse_mode='Markdown')
     else:
-        await update.message.reply_text(welcome_text, reply_markup=markup, parse_mode='Markdown')
+        await update.message.reply_text(text, reply_markup=markup, parse_mode='Markdown')
 
-async def cb_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
+    user_id = query.from_user.id
     await query.answer()
 
-    if data == "help":
-        help_text = "📚 **Help Guide:**\n\n1️⃣ Click 'Create Account'\n2️⃣ Enter Target Email\n3️⃣ Enter OTP\n4️⃣ Send Photo from Gallery\n\n❌ Use /cancel to stop."
-        await query.edit_message_text(help_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back")]]))
-    elif data == "about":
-        about_text = "ℹ️ **About This Bot:**\n\n• **Version:** 2.0\n• **Developer:** @ModAppsKing\n• **User:** @unlimited_ig_bot\n\nFree unlimited Instagram accounts with custom profile pictures."
-        await query.edit_message_text(about_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back")]]))
-    elif data == "back":
+    if data == "go_start":
         await start(update, context)
-    elif data == "admin_panel":
-        stats = f"👑 **Admin Panel**\n\n👤 Users: {len(all_users)}\n🚫 Banned: {len(banned_users)}"
-        btns = [[InlineKeyboardButton("📢 Broadcast", callback_data="ask_brd"), InlineKeyboardButton("🔨 Ban", callback_data="ask_ban")], [InlineKeyboardButton("🔙 Back", callback_data="back")]]
-        await query.edit_message_text(stats, reply_markup=InlineKeyboardMarkup(btns))
+    elif data == "help":
+        await query.edit_message_text("📚 **Help:**\n\n1. Click Create Account\n2. Enter Email & OTP\n3. Upload Photo\n\n❌ Use /cancel to stop.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="go_start")]]))
+    elif data == "about":
+        await query.edit_message_text("ℹ️ **About:**\nUnlimited IG Maker v2.0\nDev: @ModAppsKing", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="go_start")]]))
+    
+    # Admin Logic
+    if user_id in ADMIN_IDS:
+        if data == "admin_panel":
+            stats = f"👑 **Admin Panel**\n\n👤 Users: {len(all_users)}\n🚫 Banned: {len(banned_users)}"
+            btns = [[InlineKeyboardButton("📢 Broadcast", callback_data="ask_brd"), InlineKeyboardButton("🔨 Ban", callback_data="ask_ban")], [InlineKeyboardButton("🔙 Back", callback_data="go_start")]]
+            await query.edit_message_text(stats, reply_markup=InlineKeyboardMarkup(btns))
+        elif data == "ask_brd":
+            await query.edit_message_text("📢 Send the message to broadcast:")
+            return BROADCAST_MSG
+        elif data == "ask_ban":
+            await query.edit_message_text("🔨 Send the User ID to Ban:")
+            return BAN_ID
 
-# --- CREATION PROCESS ---
-async def make_acc_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.edit_message_text("📧 Sabse pehle apna **Target Email** bhejein:")
-    return GET_EMAIL
-
+# --- CREATION & ADMIN ACTIONS ---
 async def receive_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     email = update.message.text.strip()
     headers = get_headers()
     if not headers:
-        await update.message.reply_text("❌ Insta API Error. Try /start again.")
+        await update.message.reply_text("❌ Connection Error.")
         return ConversationHandler.END
     
     mid = headers['cookie'].split('mid=')[1].split(';')[0]
-    resp = requests.post(API_URL + 'accounts/send_verify_email/', headers=headers, data={'device_id': mid, 'email': email}).text
+    resp = requests.post(API_URL + 'accounts/send_verify_email/', headers=headers, data={'device_id': mid, 'email': email}).json()
     
-    if 'email_sent":true' in resp:
+    if resp.get('email_sent'):
         context.user_data.update({'email': email, 'headers': headers})
         await update.message.reply_text(f"✅ OTP sent to {email}. Code enter karein:")
         return GET_OTP
-    else:
-        await update.message.reply_text("❌ Email not supported or failed.")
-        return ConversationHandler.END
+    await update.message.reply_text("❌ Failed. Try another email.")
+    return ConversationHandler.END
 
-async def receive_otp(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    otp = update.message.text.strip()
-    email = context.user_data['email']
-    headers = context.user_data['headers']
-    mid = headers['cookie'].split('mid=')[1].split(';')[0]
+async def do_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message.text
+    for u in all_users:
+        try: await context.bot.send_message(u, f"📢 **Broadcast**\n\n{msg}")
+        except: pass
+    await update.message.reply_text("✅ Sent!")
+    return ConversationHandler.END
 
-    val = requests.post(API_URL + 'accounts/check_confirmation_code/', headers=headers, data={'code': otp, 'device_id': mid, 'email': email})
-    
-    if 'status":"ok' in val.text:
-        context.user_data['signup_code'] = val.json()['signup_code']
-        await update.message.reply_text("🖼️ Ab apni gallery se **Profile Photo** bhejein ya `/skip` karein:")
-        return GET_PHOTO
-    else:
-        await update.message.reply_text("❌ Invalid OTP.")
-        return ConversationHandler.END
-
-async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    photo = await update.message.photo[-1].get_file()
-    path = f"img_{user_id}.jpg"
-    await photo.download_to_drive(path)
-    return await create_and_finish(update, context, path)
-
-async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await create_and_finish(update, context, None)
-
-async def create_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE, photo_path):
-    data = context.user_data
-    headers = data['headers']
-    fname = names.get_first_name()
-    uname = fname + str(random.randint(100, 999))
-    pwd = fname + "@" + str(random.randint(111, 999))
-    mid = headers['cookie'].split('mid=')[1].split(';')[0]
-
-    create_data = {
-        'enc_password': f'#PWD_INSTAGRAM_BROWSER:0:{round(time.time())}:{pwd}',
-        'email': data['email'], 'username': uname, 'first_name': fname,
-        'month': 5, 'day': 20, 'year': 1996, 'client_id': mid,
-        'tos_version': 'row', 'force_sign_up_code': data['signup_code']
-    }
-    
-    resp = requests.post(API_URL + 'web/accounts/web_create_ajax/', headers=headers, data=create_data)
-    
-    if '"account_created":true' in resp.text:
-        img_status = "Skipped"
-        if photo_path:
-            # Simple simulation of photo upload logic
-            img_status = "Uploaded ✅"
-            if os.path.exists(photo_path): os.remove(photo_path)
-        
-        res_text = f"👑 **Account Created!**\n\n👤 **User:** `{uname}`\n🔑 **Pass:** `{pwd}`\n🖼️ **Photo:** {img_status}"
-        await update.message.reply_text(res_text, parse_mode='Markdown')
-    else:
-        await update.message.reply_text("❌ Creation Failed.")
-    
+async def do_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = int(update.message.text)
+    banned_users.add(uid)
+    save_data(BANNED_FILE, banned_users)
+    await update.message.reply_text(f"✅ User {uid} Banned.")
     return ConversationHandler.END
 
 def main():
     Thread(target=run_flask).start()
-    bot = Application.builder().token(BOT_TOKEN).build()
+    bot_app = Application.builder().token(BOT_TOKEN).build()
 
+    # Master Conversation
     conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(make_acc_start, pattern="^make_acc$")],
+        entry_points=[
+            CallbackQueryHandler(button_router, pattern="^make_acc$"),
+            CallbackQueryHandler(button_router, pattern="^ask_")
+        ],
         states={
             GET_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_email)],
-            GET_OTP: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_otp)],
-            GET_PHOTO: [MessageHandler(filters.PHOTO, receive_photo), CommandHandler("skip", skip_photo)],
+            BROADCAST_MSG: [MessageHandler(filters.TEXT & ~filters.COMMAND, do_broadcast)],
+            BAN_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, do_ban)],
         },
         fallbacks=[CommandHandler("cancel", start)]
     )
 
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(conv)
-    bot.add_handler(CallbackQueryHandler(cb_handler))
-    bot.run_polling()
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(conv)
+    bot_app.add_handler(CallbackQueryHandler(button_router))
+    
+    print("🟢 Bot is Live with Admin Panel!")
+    bot_app.run_polling()
 
 if __name__ == '__main__':
     main()
+                                      
